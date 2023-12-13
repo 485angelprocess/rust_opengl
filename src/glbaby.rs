@@ -34,12 +34,12 @@ struct Socket{ // TODO: probably add name at some point
 	flag: Vec<DrawFlag>,
 	max: i32,
 	min: i32,
-	parent_ref: usize
-	// name: String // todo have string identifier //ID info of socket
+	parent_ref: usize,
+	name: String // todo have string identifier //ID info of socket
 }
 
 impl Socket{
-	fn new(reference: Rc<RefCell<i32>>, call: Option<fn(i32)>, max: i32, min: i32) -> Socket{
+	fn new(reference: Rc<RefCell<i32>>, call: Option<fn(i32)>, max: i32, min: i32, name: &str) -> Socket{
 		// Create a new socket with default values
 		Socket{
 			latched: 0,
@@ -49,7 +49,8 @@ impl Socket{
 			max: max,
 			min: min,
 			parent_ref: 0,
-			flag: Vec::new()
+			flag: Vec::new(),
+			name: String::from(name)
 		}
 	}
 	
@@ -124,7 +125,7 @@ impl Socket{
 /********* Node **********/
 pub trait Node{
 	// STUB
-	fn update(&mut self, _fc: i32, flags: &Vec<DrawFlag>){}
+	fn update(&mut self, _fc: i32, _flags: &Vec<DrawFlag>){}
 	fn draw(&self, flags: &Vec<DrawFlag>){
 		for f in flags{
 			match f{
@@ -138,22 +139,52 @@ pub trait Node{
 	
 }
 
+pub struct Input{
+	v: Rc<RefCell<i32>>
+}
+
+impl Input{
+	fn new() -> Input{
+		Input{
+			v: Rc::new(RefCell::new(0))
+		}
+	}
+	
+	fn get(&self) -> i32{
+		*self.v.borrow()
+	}
+	
+	fn get_clone(&self) ->Rc<RefCell<i32>> {
+		Rc::clone(&self.v)
+	}
+}
+
 pub struct GlobalGL{
-	r: Rc<RefCell<i32>>
+	r: Input,
+	g: Input,
+	b: Input,
+	a: Input
 }
 
 impl GlobalGL{
 	pub fn new() -> GlobalGL{
 		GlobalGL{
-			r: Rc::new(RefCell::new(0))
+			r: Input::new(),
+			g: Input::new(),
+			b: Input::new(),
+			a: Input::new()
 		}
 	}
 }
 
 impl Node for GlobalGL{
-	fn redraw(&self){ // TODO: might make this just a trait method
+	fn redraw(&self){
 		unsafe{
-		glClearColor(( *self.r.borrow()) as f32 / 1000.0, 0.3, 0.3, 1.0);
+			glClearColor(self.r.get() as f32 / 1000.0, 
+				self.g.get() as f32 / 1000.0,
+				self.b.get() as f32 / 1000.0,
+				self.a.get() as f32 / 1000.0
+			);
 		}
 		//println!("Set r to {}", *self.r.borrow());
 	}
@@ -161,7 +192,19 @@ impl Node for GlobalGL{
 	fn get_sockets(&self) -> Vec<Socket>{
 		let mut v = Vec::new();
 		
-		let mut s = Socket::new(Rc::clone(&self.r), None, 1000, 0);
+		let mut s = Socket::new(self.r.get_clone(), None, 1000, 0, "red");
+		s.add_flag(DrawFlag::REDRAW);
+		v.push(s);
+		
+		s = Socket::new(self.g.get_clone(), None, 1000, 0, "green");
+		s.add_flag(DrawFlag::REDRAW);
+		v.push(s);
+		
+		s = Socket::new(self.g.get_clone(), None, 1000, 0, "blue");
+		s.add_flag(DrawFlag::REDRAW);
+		v.push(s);
+		
+		s = Socket::new(self.g.get_clone(), None, 1000, 0, "alpha");
 		s.add_flag(DrawFlag::REDRAW);
 		v.push(s);
 		
@@ -169,11 +212,13 @@ impl Node for GlobalGL{
 	}
 }
 
+
 /********** Main struct ******************/
 pub struct GLMain{
 	sockets: Vec<Socket>,
 	nodes: Vec<Box<dyn Node>>, // may use different structure later, to use parent child topology
 	changebuffer: Vec<usize>,
+	socketparent: Vec<Vec<*const Socket>>,
 	flags: Vec<Vec<DrawFlag>>,
 	fc: i32
 }
@@ -185,25 +230,25 @@ impl GLMain{
 			nodes: Vec::new(),
 			changebuffer: Vec::new(),
 			flags: Vec::new(),
+			socketparent: Vec::new(),
 			fc: 0
 		}
 	}
 	
 	pub fn add_node(&mut self, node: Box<dyn Node>){
 		// TODO: I think im looking to copy here and not make static lifetime		
-		
-		
 		// TODO: here's where we can do some child /parent nonsense
 		// tracking
 		
 		// i think the main thing is a redraw flag to a parent should cascade down
 		// to the children
-		
-		
 		self.nodes.push(node);
+		self.socketparent.push(Vec::new());
 		for mut socket in self.nodes[self.nodes.len() - 1].get_sockets(){
 			socket.set_parent(self.nodes.len() - 1); // save who our parent is
 			self.sockets.push(socket); // accumulate all of our sockets
+			
+			self.socketparent[self.nodes.len() - 1].push(&self.sockets[self.sockets.len() - 1]); // save an index of which socket goes to which parent (USE POINTER/REF INSTEAD?)
 		}
 		self.flags.push(Vec::new());
 	}
@@ -224,7 +269,7 @@ impl GLMain{
 		/*between frames change all our little values*/		
 		for i in self.changebuffer.iter().unique(){
 			//println!("Socket {} changed", i);
-			let mut s = &mut self.sockets[*i];
+			let s = &mut self.sockets[*i];
 			//let node = &self.nodes[s.parent_ref];
 			s.run(&mut self.flags[s.parent_ref]);
 		}
@@ -241,5 +286,16 @@ impl GLMain{
 			self.flags[i] = Vec::new();
 		}
 		self.fc += 1;
+	}
+	
+	pub fn print_structure(&self){
+		for i in 0..self.nodes.len(){
+			println!("Node {}", i);
+			for s in &self.socketparent[i]{
+				unsafe{
+					println!("\t-> {}", (*(*s)).name);
+				}
+			}
+		}
 	}
 }

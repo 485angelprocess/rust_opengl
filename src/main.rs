@@ -170,6 +170,8 @@ fn main() {
   
   glmain.add_node(Box::new(glbaby::GlobalGL::new()));
   
+  glmain.print_structure();
+  
   let mut r = 0;
   
   'main_loop: loop {
@@ -190,7 +192,7 @@ fn main() {
 	glmain.draw();
 	
 	r += 1;
-	if (r > 1000){
+	if r > 1000{
 		r = 0;
 	}
 	
