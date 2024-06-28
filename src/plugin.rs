@@ -12,6 +12,10 @@ pub struct PluginValue{
 	// TODO account for other type data
 }
 
+pub struct PluginAttach{
+	
+}
+
 enum PluginValueType{
 	FLOAT, // i.e. default, some float value
 	BINARY, // can be 1 or 0
@@ -26,6 +30,10 @@ enum PluginValueType{
 	
 	// TODO video stream input?
 	// but that is more a matter of draw order
+}
+
+enum PluginDrawFlag{
+	REDRAW
 }
 
 enum DrawOrderMajor{
@@ -72,8 +80,14 @@ pub struct PluginContext{
 	// i think for multiple layer u wanna do whatver
 }
 
-pub trait GLPlugin{
+pub struct WorkspaceContext{
+	// Contains information about gui,
+	// available inputs
+	// required to allow things like routing inputs
+	modules: Vec<u32> // TEMP
+}
 
+pub trait GLPlugin{
 	fn new() -> GLPlugin{
 		/* Create new plugin from base */
 	}
@@ -181,14 +195,19 @@ pub trait GLPlugin{
 	
 	/* Draw from context */
 	// Plugin wrapper should have field for SHOW UI
-	fn draw(&self, ui, ctx :PluginContext) -> PluginContext{
+	fn draw(&self, ui, ctx :PluginContext, workspace: WorkspaceContext) -> PluginContext{
 		// Lookup parameters from context
 		// Context should be essentially vector 
 		// but ideally with string lookup
 		self.drawGeneric(ui, ctx)
 	}
 	
-	fn drawGeneric(&self, ui: &mut egui::Ui, ctx: PluginContext) -> PluginContext{
+	fn connect(&self) -> Option<Vec<PluginAttach>>{
+		// Return vector of requests to connect inputs and outputs
+		None
+	}
+	
+	fn drawGeneric(&self, ui: &mut egui::Ui, ctx: PluginContext, workspace: WorkspaceContext) -> PluginContext{
 		// so draw each input
 		// add each input value to context
 		// if changed set redraw flag
@@ -211,10 +230,20 @@ pub trait GLPlugin{
 		None
 	}
 	
-	fn gl_draw(&self, ctx: PluginContext) -> Option<PluginContext>{
+	fn gl_draw(&self, ctx: PluginContext){
 		for flag in ctx.flags{
-			
+			match flag{
+				// TODO get flags from top level file
+				PluginDrawFlag::REDRAW: gl_redraw()
+			}
 		}
+	}
+	
+	// Runs on each frame
+	fn Step(&mut self) -> Option<PluginContext>{
+		/* Override */
+		// Returns context with any values that are changing per frame
+		None
 	}
 	
 	fn SetValue(&mut self, index: u32, value: PluginValue){
@@ -256,13 +285,11 @@ impl GLPlugin for GlobalBackground{
 	}
 	
 	// TODO stylize method names more consistent lol
-	fn gl_redraw(&self) -> Option<PluginContext>{
+	fn gl_redraw(&self){
 		unsafe{
 			// Set background color correctly
 			glClearColor( self.r / 32768.0, self.g / 32768.0, self.b / 32768.0, self.a / 32768.0 );
 		}
-		
-		None
 	}
 	
 	fn SetValue(&mut self, index: u32, value: PluginValue){
